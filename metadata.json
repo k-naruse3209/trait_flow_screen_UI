@@ -1,0 +1,5 @@
+{
+  "name": "Trait Flow",
+  "description": "A personalized mental health support application based on the Big Five personality traits. It offers daily personalized messages and mood/energy tracking to help users understand themselves better.",
+  "requestFramePermissions": []
+}
