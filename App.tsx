@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -34,19 +33,33 @@ const FeatureListItem: React.FC<{ children: React.ReactNode }> = ({ children }) 
     </li>
 );
 
-const AppHeader: React.FC = () => (
-    <header className="bg-white/80 backdrop-blur-sm sticky top-0 z-10 border-b border-neutral-200">
-        <div className="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
-            <button className="text-neutral-600">
-                <MenuIcon className="w-6 h-6" />
-            </button>
-            <h1 className="text-lg font-bold text-primary">🌟 Trait Flow</h1>
-            <Link to="/app/settings" className="text-neutral-600">
-                <SettingsIcon className="w-6 h-6" />
-            </Link>
-        </div>
-    </header>
-);
+const AppHeader: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const isNotHomePage = location.pathname !== '/app/home' && location.pathname !== '/app/';
+
+    return (
+        <header className="bg-white/80 backdrop-blur-sm sticky top-0 z-10 border-b border-neutral-200">
+            <div className="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
+                <div className="w-8">
+                    {isNotHomePage ? (
+                        <button onClick={() => navigate(-1)} className="text-neutral-600 hover:text-primary">
+                            <ArrowLeftIcon className="w-6 h-6" />
+                        </button>
+                    ) : (
+                        <button className="text-neutral-600">
+                            <MenuIcon className="w-6 h-6" />
+                        </button>
+                    )}
+                </div>
+                <h1 className="text-lg font-bold text-primary">🌟 Trait Flow</h1>
+                <Link to="/app/settings" className="text-neutral-600 w-8 flex justify-end">
+                    <SettingsIcon className="w-6 h-6" />
+                </Link>
+            </div>
+        </header>
+    );
+};
 
 const BottomNav: React.FC = () => {
     const location = useLocation();
@@ -161,26 +174,31 @@ const AuthPage: React.FC = () => {
     };
     
     return (
-        <div className="min-h-screen bg-neutral-100 flex flex-col justify-center items-center p-4 text-center">
-            <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md">
-                <h1 className="text-3xl font-bold text-neutral-800 mb-2">🔐 ログイン</h1>
-                <p className="text-neutral-600 mb-6">メールアドレスにマジックリンクを送信します</p>
+        <div className="min-h-screen bg-neutral-100 flex flex-col justify-center items-center p-4">
+            <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-md relative">
+                <button onClick={() => navigate(-1)} className="absolute top-4 left-4 text-neutral-500 hover:text-neutral-800 transition-colors" aria-label="Go Back">
+                    <ArrowLeftIcon className="w-6 h-6" />
+                </button>
+                <div className="text-center">
+                    <h1 className="text-3xl font-bold text-neutral-800 mb-2">🔐 ログイン</h1>
+                    <p className="text-neutral-600 mb-6">メールアドレスにマジックリンクを送信します</p>
 
-                <div className="space-y-4">
-                    <input
-                        type="email"
-                        placeholder="📧 your@email.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full px-4 py-3 border-2 border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition"
-                        disabled={sent}
-                    />
-                    <button onClick={handleSendLink} disabled={sent} className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200 shadow-sm flex items-center justify-center disabled:bg-neutral-400">
-                        {sent ? '送信しました...' : 'マジックリンクを送信'}
-                        {!sent && <ArrowRightIcon className="w-5 h-5 ml-2" />}
-                    </button>
+                    <div className="space-y-4">
+                        <input
+                            type="email"
+                            placeholder="📧 your@email.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full px-4 py-3 border-2 border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition"
+                            disabled={sent}
+                        />
+                        <button onClick={handleSendLink} disabled={sent} className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200 shadow-sm flex items-center justify-center disabled:bg-neutral-400">
+                            {sent ? '送信しました...' : 'マジックリンクを送信'}
+                            {!sent && <ArrowRightIcon className="w-5 h-5 ml-2" />}
+                        </button>
+                    </div>
+                    {sent && <p className="mt-6 text-secondary font-medium">受信箱を確認してリンクをクリックしてください</p>}
                 </div>
-                {sent && <p className="mt-6 text-secondary font-medium">受信箱を確認してリンクをクリックしてください</p>}
             </div>
         </div>
     );
@@ -241,18 +259,23 @@ const OnboardingPage: React.FC = () => {
     
     if (step === 0) {
         return (
-            <div className="min-h-screen bg-white flex flex-col justify-center items-center p-6 text-center">
-                <div className="max-w-md w-full">
-                    <h1 className="text-3xl font-bold text-neutral-800 mb-4">👋 ようこそ Trait Flow へ</h1>
-                    <p className="text-neutral-600 mb-6">まず、あなたの性格特性を理解するために<br />簡単な10問のアンケートに答えてください</p>
-                    <div className="bg-blue-50 border-l-4 border-primary p-4 rounded-r-lg text-left mb-6">
-                        <h2 className="font-bold text-primary">TIPI (Ten-Item Personality Inventory)</h2>
-                        <p className="text-sm text-neutral-700">Big Five性格特性モデルに基づいた科学的に検証された質問票です。</p>
-                    </div>
-                    <p className="text-neutral-500 mb-8">所要時間: 約2分</p>
-                    <button onClick={() => setStep(1)} className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200 shadow-sm flex items-center justify-center">
-                        始める <ArrowRightIcon className="w-5 h-5 ml-2" />
+            <div className="min-h-screen bg-white flex flex-col justify-center items-center p-6">
+                 <div className="max-w-md w-full relative">
+                    <button onClick={() => navigate(-1)} className="absolute -top-16 left-0 text-neutral-500 hover:text-neutral-800 transition-colors" aria-label="Go Back">
+                        <ArrowLeftIcon className="w-6 h-6" />
                     </button>
+                    <div className="text-center">
+                        <h1 className="text-3xl font-bold text-neutral-800 mb-4">👋 ようこそ Trait Flow へ</h1>
+                        <p className="text-neutral-600 mb-6">まず、あなたの性格特性を理解するために<br />簡単な10問のアンケートに答えてください</p>
+                        <div className="bg-blue-50 border-l-4 border-primary p-4 rounded-r-lg text-left mb-6">
+                            <h2 className="font-bold text-primary">TIPI (Ten-Item Personality Inventory)</h2>
+                            <p className="text-sm text-neutral-700">Big Five性格特性モデルに基づいた科学的に検証された質問票です。</p>
+                        </div>
+                        <p className="text-neutral-500 mb-8">所要時間: 約2分</p>
+                        <button onClick={() => setStep(1)} className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200 shadow-sm flex items-center justify-center">
+                            始める <ArrowRightIcon className="w-5 h-5 ml-2" />
+                        </button>
+                    </div>
                 </div>
             </div>
         );
