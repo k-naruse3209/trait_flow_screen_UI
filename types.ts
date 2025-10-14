@@ -18,12 +18,12 @@ export interface TIPIQuestion {
   isReversed: boolean;
 }
 
-export type EnergyLevel = "low" | "medium" | "high" | "very_high";
+export type EnergyLevel = "low" | "medium" | "high";
 
 export interface Checkin {
   id: string;
   date: Date;
-  mood: number; // 1-10
+  mood: number; // 1-5
   energy: EnergyLevel;
   note?: string;
 }

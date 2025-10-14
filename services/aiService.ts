@@ -41,8 +41,8 @@ export const getPersonalizedMessage = async (
     text: text,
     personalizationInfo: {
       baseTrait: baseTrait,
-      mood: latestCheckin?.mood || 7,
-      energy: latestCheckin?.energy || 'medium',
+      mood: latestCheckin?.mood ?? 3,
+      energy: latestCheckin?.energy ?? 'medium',
     },
   };
 };

@@ -1,25 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { HashRouter, Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate, useLocation, Link, Navigate, Outlet } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 import { BigFiveScores, BigFiveTrait, Checkin, EnergyLevel, PersonalizedMessage } from './types';
 import { TIPI_QUESTIONS } from './constants';
-import { HomeIcon, HistoryIcon, SettingsIcon, ArrowRightIcon, ArrowLeftIcon, MenuIcon } from './components/Icons';
+import { HomeIcon, HistoryIcon, SettingsIcon, ArrowRightIcon, ArrowLeftIcon, MenuIcon, CloseIcon } from './components/Icons';
 import BigFiveRadarChart from './components/BigFiveRadarChart';
 import CheckinModal from './components/CheckinModal';
 import { getPersonalizedMessage } from './services/aiService';
 
 // Mock data
 const mockCheckinHistory: Checkin[] = [
-    { id: 'c4', date: new Date(2025, 9, 13, 14, 30), mood: 8, energy: 'high', note: 'プロジェクトが順調に進んで嬉しい' },
-    { id: 'c3', date: new Date(2025, 9, 12, 9, 15), mood: 6, energy: 'medium', note: '少し疲れ気味' },
-    { id: 'c2', date: new Date(2025, 9, 11, 19, 45), mood: 7, energy: 'high' },
-    { id: 'c1', date: new Date(2025, 9, 10, 10, 0), mood: 4, energy: 'low', note: '朝から調子が悪い' },
+    { id: 'c4', date: new Date(2025, 9, 13, 14, 30), mood: 5, energy: 'high', note: 'プロジェクトが順調に進んで嬉しい' },
+    { id: 'c3', date: new Date(2025, 9, 12, 9, 15), mood: 3, energy: 'medium', note: '少し疲れ気味' },
+    { id: 'c2', date: new Date(2025, 9, 11, 19, 45), mood: 4, energy: 'high' },
+    { id: 'c1', date: new Date(2025, 9, 10, 10, 0), mood: 2, energy: 'low', note: '朝から調子が悪い' },
 ];
 const mockMessageHistory: PersonalizedMessage[] = [
-    { id: 'm2', date: new Date(2025, 9, 13), text: "あなたの高い協調性は素晴らしい強みです。今日は誰かの話をじっくり聴いてみてはいかがでしょうか？", rating: 5, personalizationInfo: { baseTrait: BigFiveTrait.Agreeableness, mood: 8, energy: 'high' } },
-    { id: 'm1', date: new Date(2025, 9, 12), text: "時には休息も必要です。自分のペースで進めていきましょう。", rating: 4, personalizationInfo: { baseTrait: BigFiveTrait.Conscientiousness, mood: 6, energy: 'medium' } },
+    { id: 'm2', date: new Date(2025, 9, 13), text: "あなたの高い協調性は素晴らしい強みです。今日は誰かの話をじっくり聴いてみてはいかがでしょうか？", rating: 5, personalizationInfo: { baseTrait: BigFiveTrait.Agreeableness, mood: 5, energy: 'high' } },
+    { id: 'm1', date: new Date(2025, 9, 12), text: "時には休息も必要です。自分のペースで進めていきましょう。", rating: 4, personalizationInfo: { baseTrait: BigFiveTrait.Conscientiousness, mood: 3, energy: 'medium' } },
 ];
+const QUESTIONS_PER_PAGE = 5;
+
+const createInitialScores = (): BigFiveScores => ({
+    [BigFiveTrait.Extraversion]: 0,
+    [BigFiveTrait.Agreeableness]: 0,
+    [BigFiveTrait.Conscientiousness]: 0,
+    [BigFiveTrait.Neuroticism]: 0,
+    [BigFiveTrait.Openness]: 0,
+});
+
+const mockUserScores: BigFiveScores = {
+    [BigFiveTrait.Extraversion]: 3.5,
+    [BigFiveTrait.Agreeableness]: 5.8,
+    [BigFiveTrait.Conscientiousness]: 6.2,
+    [BigFiveTrait.Neuroticism]: 2.1,
+    [BigFiveTrait.Openness]: 5.1,
+};
 
 
 // --- Helper Components (defined outside main components to prevent re-renders) ---
@@ -93,7 +110,7 @@ const DevNav: React.FC = () => {
     const pages = [
         { path: '/', name: 'Landing' },
         { path: '/auth', name: 'Auth' },
-        { path: '/onboarding', name: 'Onboarding' },
+        { path: '/app/onboarding', name: 'Onboarding' },
         { path: '/app/home', name: 'Home' },
         { path: '/app/history', name: 'History' },
         { path: '/app/settings', name: 'Settings' },
@@ -168,7 +185,7 @@ const AuthPage: React.FC = () => {
         if (email) {
             setSent(true);
             setTimeout(() => {
-                navigate('/onboarding');
+                navigate('/app/onboarding');
             }, 2000);
         }
     };
@@ -204,63 +221,78 @@ const AuthPage: React.FC = () => {
     );
 };
 
+type OnboardingStep = 'welcome' | 'quiz' | 'result';
+
 const OnboardingPage: React.FC = () => {
-    const [step, setStep] = useState(0); // 0: welcome, 1: questions, 2: results
-    const [answers, setAnswers] = useState<{[key: number]: number}>({});
-    const [currentQuestion, setCurrentQuestion] = useState(0);
+    const [step, setStep] = useState<OnboardingStep>('welcome');
+    const [pageIndex, setPageIndex] = useState(0);
+    const [answers, setAnswers] = useState<{ [key: number]: number }>({});
     const [scores, setScores] = useState<BigFiveScores | null>(null);
     const navigate = useNavigate();
 
-    const handleNext = () => {
-        if (currentQuestion < TIPI_QUESTIONS.length - 1) {
-            setCurrentQuestion(prev => prev + 1);
-        } else {
-            calculateScores();
-            setStep(2);
-        }
-    };
+    const totalPages = Math.ceil(TIPI_QUESTIONS.length / QUESTIONS_PER_PAGE);
+    const pageQuestions = TIPI_QUESTIONS.slice(pageIndex * QUESTIONS_PER_PAGE, (pageIndex + 1) * QUESTIONS_PER_PAGE);
 
-    const handleBack = () => {
-        if (currentQuestion > 0) {
-            setCurrentQuestion(prev => prev - 1);
-        }
-    };
-    
     const handleAnswer = (questionId: number, value: number) => {
         setAnswers(prev => ({ ...prev, [questionId]: value }));
     };
 
-    const calculateScores = () => {
-        const calculatedScores: BigFiveScores = {
+    const calculateScores = useCallback(() => {
+        const calculatedScores = createInitialScores();
+        const traitCounts: Record<BigFiveTrait, number> = {
             [BigFiveTrait.Extraversion]: 0,
             [BigFiveTrait.Agreeableness]: 0,
             [BigFiveTrait.Conscientiousness]: 0,
             [BigFiveTrait.Neuroticism]: 0,
             [BigFiveTrait.Openness]: 0,
         };
-        const traitCounts = {...calculatedScores};
 
-        TIPI_QUESTIONS.forEach(q => {
-            const answer = answers[q.id] || 4; // Default to neutral if not answered
-            const score = q.isReversed ? 8 - answer : answer;
-            calculatedScores[q.trait] += score;
-            traitCounts[q.trait] += 1;
+        TIPI_QUESTIONS.forEach(question => {
+            const answer = answers[question.id] ?? 4;
+            const score = question.isReversed ? 8 - answer : answer;
+            calculatedScores[question.trait] += score;
+            traitCounts[question.trait] += 1;
         });
 
-        for (const trait in calculatedScores) {
-             const key = trait as BigFiveTrait;
-             calculatedScores[key] /= traitCounts[key];
-        }
+        (Object.keys(calculatedScores) as BigFiveTrait[]).forEach(trait => {
+            if (traitCounts[trait] > 0) {
+                calculatedScores[trait] = calculatedScores[trait] / traitCounts[trait];
+            }
+        });
 
-        setScores(calculatedScores);
+        return calculatedScores;
+    }, [answers]);
+
+    const handleNextPage = () => {
+        if (pageIndex < totalPages - 1) {
+            setPageIndex(prev => prev + 1);
+        } else {
+            const calculated = calculateScores();
+            setScores(calculated);
+            setStep('result');
+        }
     };
 
-    const q = TIPI_QUESTIONS[currentQuestion];
-    
-    if (step === 0) {
+    const handlePrevPage = () => {
+        if (pageIndex > 0) {
+            setPageIndex(prev => prev - 1);
+        } else {
+            setStep('welcome');
+        }
+    };
+
+    const startQuestionnaire = () => {
+        setPageIndex(0);
+        setStep('quiz');
+    };
+
+    const isPageComplete = pageQuestions.every(question => answers[question.id] !== undefined);
+    const progress = ((pageIndex + 1) / totalPages) * 100;
+
+    if (step === 'welcome') {
         return (
             <div className="min-h-screen bg-white flex flex-col justify-center items-center p-6">
-                 <div className="max-w-md w-full relative">
+                <div className="max-w-md w-full relative">
                     <button onClick={() => navigate(-1)} className="absolute -top-16 left-0 text-neutral-500 hover:text-neutral-800 transition-colors" aria-label="Go Back">
                         <ArrowLeftIcon className="w-6 h-6" />
                     </button>
@@ -271,8 +303,8 @@ const OnboardingPage: React.FC = () => {
                             <h2 className="font-bold text-primary">TIPI (Ten-Item Personality Inventory)</h2>
                             <p className="text-sm text-neutral-700">Big Five性格特性モデルに基づいた科学的に検証された質問票です。</p>
                         </div>
-                        <p className="text-neutral-500 mb-8">所要時間: 約2分</p>
-                        <button onClick={() => setStep(1)} className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200 shadow-sm flex items-center justify-center">
+                        <p className="text-neutral-500 mb-8">全2ページ（各5問）・所要時間 約3分</p>
+                        <button onClick={startQuestionnaire} className="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200 shadow-sm flex items-center justify-center">
                             始める <ArrowRightIcon className="w-5 h-5 ml-2" />
                         </button>
                     </div>
@@ -280,52 +312,60 @@ const OnboardingPage: React.FC = () => {
             </div>
         );
     }
-    
-    if (step === 1) {
+
+    if (step === 'quiz') {
         return (
             <div className="min-h-screen bg-white flex flex-col justify-center items-center p-4">
-                <div className="max-w-md w-full">
-                    <div className="px-2 mb-6">
-                        <div className="text-right text-sm text-neutral-500 mb-1">{currentQuestion + 1} / {TIPI_QUESTIONS.length}</div>
+                <div className="max-w-md w-full space-y-6">
+                    <div className="px-2">
+                        <div className="text-right text-sm text-neutral-500 mb-1">{pageIndex + 1} / {totalPages}</div>
                         <div className="w-full bg-neutral-200 rounded-full h-2.5">
-                            <div className="bg-primary h-2.5 rounded-full" style={{ width: `${((currentQuestion + 1) / TIPI_QUESTIONS.length) * 100}%` }}></div>
+                            <div className="bg-primary h-2.5 rounded-full transition-all" style={{ width: `${progress}%` }}></div>
                         </div>
                     </div>
-                    
-                    <div className="bg-neutral-50 p-6 rounded-xl shadow-sm text-center">
-                        <p className="text-neutral-600 mb-4">私は自分自身を次のような人間だと思う:</p>
-                        <p className="text-xl font-bold text-neutral-800 mb-8 h-14 flex items-center justify-center">「{q.text}」</p>
-                        <div className="flex justify-between text-xs text-neutral-500 px-1 mb-2">
-                            <span>全く当てはまらない</span>
-                            <span>非常に当てはまる</span>
-                        </div>
-                        <input
-                            type="range"
-                            min="1"
-                            max="7"
-                            value={answers[q.id] || 4}
-                            onChange={(e) => handleAnswer(q.id, Number(e.target.value))}
-                            className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-primary"
-                        />
-                         <div className="flex justify-between text-xs text-neutral-500 px-1 mt-1">
-                            {[1,2,3,4,5,6,7].map(n => <span key={n}>{n}</span>)}
-                        </div>
+
+                    <div className="space-y-5">
+                        {pageQuestions.map(question => (
+                            <div key={question.id} className="bg-neutral-50 p-5 rounded-xl shadow-sm">
+                                <p className="text-sm text-neutral-500 mb-3">私は自分自身を次のような人間だと思う:</p>
+                                <p className="text-lg font-bold text-neutral-800 mb-4">「{question.text}」</p>
+                                <div className="flex justify-between text-xs text-neutral-500 px-1 mb-2">
+                                    <span>全く当てはまらない</span>
+                                    <span>非常に当てはまる</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="7"
+                                    value={answers[question.id] ?? 4}
+                                    onChange={(e) => handleAnswer(question.id, Number(e.target.value))}
+                                    className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                                <div className="flex justify-between text-xs text-neutral-400 px-1 mt-1">
+                                    {[1, 2, 3, 4, 5, 6, 7].map(n => <span key={n}>{n}</span>)}
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                    
-                    <div className="flex justify-between mt-8">
-                         <button onClick={handleBack} disabled={currentQuestion === 0} className="bg-neutral-200 text-neutral-700 font-bold py-3 px-6 rounded-lg hover:bg-neutral-300 transition-colors duration-200 flex items-center disabled:opacity-50">
+
+                    <div className="flex justify-between pt-2">
+                        <button onClick={handlePrevPage} className="bg-neutral-200 text-neutral-700 font-bold py-3 px-6 rounded-lg hover:bg-neutral-300 transition-colors duration-200 flex items-center">
                             <ArrowLeftIcon className="w-5 h-5 mr-2" /> 戻る
                         </button>
-                         <button onClick={handleNext} disabled={!answers[q.id]} className="bg-primary text-white font-bold py-3 px-6 rounded-lg hover:bg-primary-dark transition-colors duration-200 flex items-center disabled:bg-neutral-400">
-                            {currentQuestion === TIPI_QUESTIONS.length - 1 ? '完了' : '次へ'} <ArrowRightIcon className="w-5 h-5 ml-2" />
+                        <button
+                            onClick={handleNextPage}
+                            disabled={!isPageComplete}
+                            className={`text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center ${isPageComplete ? 'bg-primary hover:bg-primary-dark' : 'bg-neutral-400 cursor-not-allowed'}`}
+                        >
+                            {pageIndex === totalPages - 1 ? '完了' : '次へ'} <ArrowRightIcon className="w-5 h-5 ml-2" />
                         </button>
                     </div>
                 </div>
             </div>
         );
     }
-    
-    if (step === 2 && scores) {
+
+    if (step === 'result' && scores) {
         return (
             <div className="min-h-screen bg-white flex flex-col justify-center items-center p-4">
                 <div className="max-w-md w-full text-center">
@@ -350,8 +390,9 @@ const OnboardingPage: React.FC = () => {
         );
     }
 
-    return <div>Loading...</div>;
+    return null;
 };
+
 
 const HomePage: React.FC = () => {
     const [isCheckinModalOpen, setCheckinModalOpen] = useState(false);
@@ -360,12 +401,7 @@ const HomePage: React.FC = () => {
 
     const fetchMessage = useCallback(async () => {
         setLoadingMessage(true);
-        // In a real app, you would fetch the user's actual scores and checkin data.
-        const mockScores: BigFiveScores = {
-            [BigFiveTrait.Extraversion]: 3.5, [BigFiveTrait.Agreeableness]: 5.8, [BigFiveTrait.Conscientiousness]: 6.2,
-            [BigFiveTrait.Neuroticism]: 2.1, [BigFiveTrait.Openness]: 5.1
-        };
-        const msg = await getPersonalizedMessage(mockScores, mockCheckinHistory[0] || null);
+        const msg = await getPersonalizedMessage(mockUserScores, mockCheckinHistory[0] || null);
         setMessage(msg);
         setLoadingMessage(false);
     }, []);
@@ -375,9 +411,17 @@ const HomePage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleSaveCheckin = (checkinData: Omit<Checkin, 'id' | 'date'>) => {
-        console.log("Saving check-in:", checkinData);
-        // Here you would save the data to your backend.
+    const handleSaveCheckin = async (checkinData: Omit<Checkin, 'id' | 'date'>) => {
+        // In the real app this would persist to the backend and refresh state.
+        const latestCheckin: Checkin = {
+            id: `temp-${Date.now()}`,
+            date: new Date(),
+            ...checkinData,
+        };
+        const newMessage = await getPersonalizedMessage(mockUserScores, latestCheckin);
+        setMessage(newMessage);
+        setLoadingMessage(false);
+        return newMessage;
     };
     
     return (
@@ -424,6 +468,55 @@ const HomePage: React.FC = () => {
     );
 };
 
+interface MessageDetailDrawerProps {
+    message: PersonalizedMessage;
+    onClose: () => void;
+}
+
+const MessageDetailDrawer: React.FC<MessageDetailDrawerProps> = ({ message, onClose }) => {
+    return (
+        <div className="fixed inset-0 flex justify-end z-40">
+            <button
+                className="flex-1 bg-black/30"
+                aria-label="Close drawer overlay"
+                onClick={onClose}
+            />
+            <div className="w-full max-w-md h-full bg-white shadow-2xl p-6 animate-drawer-slide flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-neutral-800">メッセージ詳細</h2>
+                    <button onClick={onClose} className="text-neutral-500 hover:text-neutral-800">
+                        <CloseIcon className="w-6 h-6" />
+                    </button>
+                </div>
+                <p className="text-sm text-neutral-500 mb-4">📬 {message.date.toLocaleString('ja-JP')}</p>
+                <div className="flex-1 overflow-y-auto">
+                    <p className="text-neutral-700 leading-relaxed whitespace-pre-line">{message.text}</p>
+                </div>
+                <div className="mt-6 p-4 bg-neutral-50 border border-neutral-200 rounded-lg text-sm text-neutral-600 space-y-1">
+                    <p>基準となった特性: <span className="font-semibold text-neutral-800">{message.personalizationInfo.baseTrait}</span></p>
+                    <p>チェックイン気分: <span className="font-semibold text-neutral-800">{message.personalizationInfo.mood}/5</span></p>
+                    <p>エネルギー: <span className="font-semibold text-neutral-800">{message.personalizationInfo.energy}</span></p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="mt-6 w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-primary-dark transition-colors duration-200"
+                >
+                    閉じる
+                </button>
+            </div>
+            <style>{`
+                @keyframes drawer-slide {
+                    from { transform: translateX(100%); }
+                    to { transform: translateX(0); }
+                }
+                .animate-drawer-slide {
+                    animation: drawer-slide 0.3s ease-out;
+                }
+            `}</style>
+        </div>
+    );
+};
+
 const HistoryPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'checkin' | 'message'>('checkin');
     
@@ -431,9 +524,10 @@ const HistoryPage: React.FC = () => {
       low: { emoji: '😴', label: '低い' },
       medium: { emoji: '😐', label: '普通' },
       high: { emoji: '🙂', label: '高い' },
-      very_high: { emoji: '⚡️', label: '非常に高い' }
     };
     
+    const [selectedMessage, setSelectedMessage] = useState<PersonalizedMessage | null>(null);
+
     return (
         <div className="p-4">
             <h1 className="text-2xl font-bold text-neutral-800 mb-4">履歴</h1>
@@ -454,7 +548,7 @@ const HistoryPage: React.FC = () => {
                 {activeTab === 'checkin' && mockCheckinHistory.map(item => (
                     <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm border">
                         <p className="text-sm text-neutral-500 mb-1">{item.date.toLocaleString('ja-JP')}</p>
-                        <p className="text-neutral-800 font-medium">気分: {item.mood}/10 | エネルギー: {energyMap[item.energy].emoji} {energyMap[item.energy].label}</p>
+                        <p className="text-neutral-800 font-medium">気分: {item.mood}/5 | エネルギー: {energyMap[item.energy].emoji} {energyMap[item.energy].label}</p>
                         {item.note && <p className="text-sm text-neutral-600 mt-2 bg-neutral-100 p-2 rounded">メモ: {item.note}</p>}
                     </div>
                 ))}
@@ -468,7 +562,12 @@ const HistoryPage: React.FC = () => {
                             {'⭐'.repeat(item.rating || 0)}{'☆'.repeat(5 - (item.rating || 0))}
                             <span className="ml-2 text-neutral-500">評価済み</span>
                           </div>
-                          <button className="font-bold text-primary hover:underline">👉 詳細を見る</button>
+                          <button
+                            className="font-bold text-primary hover:underline"
+                            onClick={() => setSelectedMessage(item)}
+                          >
+                            👉 詳細を見る
+                          </button>
                         </div>
                     </div>
                 ))}
@@ -477,6 +576,12 @@ const HistoryPage: React.FC = () => {
                     <button className="text-primary font-semibold hover:underline">↓ もっと読み込む</button>
                 </div>
             </div>
+            {selectedMessage && (
+                <MessageDetailDrawer
+                    message={selectedMessage}
+                    onClose={() => setSelectedMessage(null)}
+                />
+            )}
         </div>
     );
 };
@@ -558,39 +663,41 @@ const SettingsPage: React.FC = () => {
 
 // --- Main App Layout & Router ---
 
-const AppLayout: React.FC<{children: React.ReactNode}> = ({ children }) => (
-    <div className="max-w-md mx-auto bg-neutral-50 min-h-screen flex flex-col font-sans">
-        <AppHeader />
-        <main className="flex-grow">
-            {children}
-        </main>
-        <BottomNav />
-    </div>
-);
+const AppLayout: React.FC = () => {
+    const location = useLocation();
+    const hideChrome = location.pathname === '/app/onboarding';
+
+    return (
+        <div className="max-w-md mx-auto bg-neutral-50 min-h-screen flex flex-col font-sans">
+            {!hideChrome && <AppHeader />}
+            <main className="flex-grow">
+                <Outlet />
+            </main>
+            {!hideChrome && <BottomNav />}
+        </div>
+    );
+};
 
 
 const App: React.FC = () => {
-  return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/onboarding" element={<OnboardingPage />} />
-        <Route path="/app/*" element={
-            <AppLayout>
-                <Routes>
+    return (
+        <HashRouter>
+            <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/app" element={<AppLayout />}>
+                    <Route path="onboarding" element={<OnboardingPage />} />
                     <Route path="home" element={<HomePage />} />
                     <Route path="history" element={<HistoryPage />} />
                     <Route path="settings" element={<SettingsPage />} />
+                    <Route index element={<Navigate to="home" replace />} />
                     <Route path="*" element={<Navigate to="home" replace />} />
-                </Routes>
-            </AppLayout>
-        }/>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <DevNav />
-    </HashRouter>
-  );
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            <DevNav />
+        </HashRouter>
+    );
 };
 
 export default App;
