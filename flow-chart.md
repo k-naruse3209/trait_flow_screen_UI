@@ -1,4 +1,3 @@
-
 '''mermaid
 flowchart TD
     %% スタイル定義
@@ -110,4 +109,4 @@ flowchart TD
     Note3["📌 通知機能<br/>・定時チェックインリマインダー<br/>・AI介入メッセージ通知<br/>・設定画面で制御可能"]
     
     class Note1,Note2,Note3 noteStyle
-    '''
+'''
